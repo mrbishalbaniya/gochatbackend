@@ -17,6 +17,7 @@ import (
 	"github.com/pulse/chat-service/internal/config"
 	"github.com/pulse/chat-service/internal/database"
 	"github.com/pulse/chat-service/internal/handlers"
+	"github.com/pulse/chat-service/internal/push"
 	"github.com/pulse/chat-service/internal/routes"
 	"github.com/pulse/chat-service/internal/services"
 	"github.com/pulse/chat-service/internal/storage"
@@ -78,7 +79,13 @@ func main() {
 	defer cancel()
 	go hub.Run(ctx)
 	go callHub.Run(ctx)
-	go (&workers.NotificationWorker{DB: db}).Run(ctx)
+	pushSender := &push.Sender{Cfg: cfg, DB: db}
+	go (&workers.NotificationWorker{DB: db, Push: pushSender}).Run(ctx)
+	if pushSender.Enabled() {
+		slog.Info("web push enabled")
+	} else {
+		slog.Warn("web push disabled — set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY")
+	}
 
 	r := gin.New()
 	r.Use(gin.Recovery(), gin.Logger())

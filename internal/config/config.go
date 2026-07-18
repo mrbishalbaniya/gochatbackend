@@ -30,6 +30,10 @@ type Config struct {
 	TURNCredential  string
 	MaxParticipants int
 	CallTimeoutSec  int
+	// Web Push (VAPID)
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+	VAPIDSubject    string
 }
 
 func Load() (*Config, error) {
@@ -52,6 +56,9 @@ func Load() (*Config, error) {
 		TURNCredential:   getEnv("TURN_CREDENTIAL", ""),
 		MaxParticipants:  getEnvInt("MAX_PARTICIPANTS", 12),
 		CallTimeoutSec:   getEnvInt("CALL_TIMEOUT_SEC", 60),
+		VAPIDPublicKey:   os.Getenv("VAPID_PUBLIC_KEY"),
+		VAPIDPrivateKey:  os.Getenv("VAPID_PRIVATE_KEY"),
+		VAPIDSubject:     getEnv("VAPID_SUBJECT", "mailto:admin@pulse.local"),
 	}
 
 	accessMin := getEnvInt("ACCESS_TOKEN_TTL_MIN", 15)

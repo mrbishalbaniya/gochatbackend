@@ -2,14 +2,16 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pulse/chat-service/internal/constants"
 	"github.com/pulse/chat-service/internal/dto"
 	"github.com/pulse/chat-service/internal/models"
 	"github.com/pulse/chat-service/internal/utils"
-	"github.com/google/uuid"
+	"gorm.io/datatypes"
 )
 
 type MessageView struct {
@@ -55,6 +57,7 @@ func (s *Services) SendMessage(ctx context.Context, userID, conversationID uuid.
 			})
 			_ = s.Notifications.Create(ctx, &models.NotificationQueue{
 				UserID: u.ID, Type: "mention", Title: "You were mentioned", Body: body, Status: "pending",
+				Payload: mustJSON(map[string]interface{}{"conversationId": conversationID.String(), "messageId": msg.ID.String()}),
 			})
 		}
 		_ = s.Mentions.CreateMany(ctx, mentions)
@@ -73,6 +76,7 @@ func (s *Services) SendMessage(ctx context.Context, userID, conversationID uuid.
 		if !m.IsMuted {
 			_ = s.Notifications.Create(ctx, &models.NotificationQueue{
 				UserID: m.UserID, Type: "message", Title: "New message", Body: truncate(body, 120), Status: "pending",
+				Payload: mustJSON(map[string]interface{}{"conversationId": conversationID.String(), "messageId": msg.ID.String()}),
 			})
 		}
 	}
@@ -354,4 +358,12 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "…"
+}
+
+func mustJSON(v interface{}) datatypes.JSON {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return datatypes.JSON([]byte("{}"))
+	}
+	return datatypes.JSON(b)
 }

@@ -543,6 +543,45 @@ func (h *Handler) DeviceToken(c *gin.Context) {
 	utils.JSON(c, 200, gin.H{"ok": true})
 }
 
+func (h *Handler) VAPIDPublicKey(c *gin.Context) {
+	key := h.Svc.Cfg.VAPIDPublicKey
+	if key == "" {
+		utils.JSON(c, 200, gin.H{"publicKey": "", "enabled": false})
+		return
+	}
+	utils.JSON(c, 200, gin.H{"publicKey": key, "enabled": true})
+}
+
+func (h *Handler) PushSubscribe(c *gin.Context) {
+	uid, _ := middleware.GetUserID(c)
+	var req dto.PushSubscribeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	if err := h.Svc.SubscribePush(c.Request.Context(), uid, req); err != nil {
+		utils.Internal(c, err.Error())
+		return
+	}
+	utils.JSON(c, 200, gin.H{"ok": true})
+}
+
+func (h *Handler) PushUnsubscribe(c *gin.Context) {
+	uid, _ := middleware.GetUserID(c)
+	var body struct {
+		Endpoint string `json:"endpoint" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	if err := h.Svc.UnsubscribePush(c.Request.Context(), uid, body.Endpoint); err != nil {
+		utils.Internal(c, err.Error())
+		return
+	}
+	utils.JSON(c, 200, gin.H{"ok": true})
+}
+
 func (h *Handler) Notifications(c *gin.Context) {
 	uid, _ := middleware.GetUserID(c)
 	items, err := h.Svc.ListNotifications(c.Request.Context(), uid)

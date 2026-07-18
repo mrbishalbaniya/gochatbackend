@@ -14,6 +14,7 @@ import (
 	"github.com/pulse/chat-service/internal/call/models"
 	"github.com/pulse/chat-service/internal/call/turn"
 	"github.com/pulse/chat-service/internal/call/webrtc"
+	chatmodels "github.com/pulse/chat-service/internal/models"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -140,6 +141,13 @@ func (s *Services) StartCall(ctx context.Context, initiator uuid.UUID, req dto.S
 				_ = tx.Create(&models.CallNotification{
 					UserID: parts[i].UserID, CallID: call.ID, Type: "incoming_call",
 					Title: "Incoming call", Body: string(req.CallType), Status: "pending",
+				}).Error
+				payload, _ := json.Marshal(map[string]interface{}{
+					"callId": call.ID.String(), "callType": req.CallType, "url": "/inbox",
+				})
+				_ = tx.Create(&chatmodels.NotificationQueue{
+					UserID: parts[i].UserID, Type: "incoming_call", Title: "Incoming call",
+					Body: req.CallType + " call", Payload: datatypes.JSON(payload), Status: "pending",
 				}).Error
 			}
 		}

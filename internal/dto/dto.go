@@ -119,6 +119,16 @@ type SettingsRequest struct {
 type DeviceTokenRequest struct {
 	Token    string `json:"token" binding:"required"`
 	Platform string `json:"platform" binding:"required"`
+	P256dh   string `json:"p256dh"`
+	Auth     string `json:"auth"`
+}
+
+type PushSubscribeRequest struct {
+	Endpoint string `json:"endpoint" binding:"required"`
+	Keys     struct {
+		P256dh string `json:"p256dh" binding:"required"`
+		Auth   string `json:"auth" binding:"required"`
+	} `json:"keys" binding:"required"`
 }
 
 type CallRequest struct {

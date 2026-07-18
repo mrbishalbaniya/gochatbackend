@@ -152,8 +152,24 @@ func (s *Services) GetSettings(ctx context.Context, userID uuid.UUID) (*models.C
 
 func (s *Services) RegisterDevice(ctx context.Context, userID uuid.UUID, req dto.DeviceTokenRequest) error {
 	return s.Devices.Upsert(ctx, &models.DeviceToken{
-		UserID: userID, Token: utils.SanitizeText(req.Token, 512), Platform: utils.SanitizeText(req.Platform, 32), Active: true,
+		UserID: userID, Token: utils.SanitizeText(req.Token, 2048), Platform: utils.SanitizeText(req.Platform, 32),
+		P256dh: req.P256dh, Auth: req.Auth, Active: true,
 	})
+}
+
+func (s *Services) SubscribePush(ctx context.Context, userID uuid.UUID, req dto.PushSubscribeRequest) error {
+	return s.Devices.Upsert(ctx, &models.DeviceToken{
+		UserID:   userID,
+		Token:    req.Endpoint,
+		P256dh:   req.Keys.P256dh,
+		Auth:     req.Keys.Auth,
+		Platform: "web",
+		Active:   true,
+	})
+}
+
+func (s *Services) UnsubscribePush(ctx context.Context, userID uuid.UUID, endpoint string) error {
+	return s.Devices.Deactivate(ctx, userID, endpoint)
 }
 
 func (s *Services) ListNotifications(ctx context.Context, userID uuid.UUID) ([]models.NotificationQueue, error) {

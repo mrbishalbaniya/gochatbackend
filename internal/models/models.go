@@ -226,7 +226,9 @@ type UserPresence struct {
 type DeviceToken struct {
 	Base
 	UserID   uuid.UUID `gorm:"type:uuid;index;not null" json:"userId"`
-	Token    string    `gorm:"size:512;uniqueIndex;not null" json:"token"`
+	Token    string    `gorm:"type:text;uniqueIndex;not null" json:"token"` // push endpoint URL
+	P256dh   string    `gorm:"type:text" json:"p256dh,omitempty"`
+	Auth     string    `gorm:"type:text" json:"auth,omitempty"`
 	Platform string    `gorm:"size:32;not null" json:"platform"`
 	Active   bool      `gorm:"default:true" json:"active"`
 }

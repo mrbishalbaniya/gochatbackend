@@ -86,6 +86,9 @@ func Register(
 			secured.PATCH("/settings", h.UpdateSettings)
 			secured.POST("/devices", h.DeviceToken)
 			secured.GET("/notifications", h.Notifications)
+			secured.GET("/push/vapid-public-key", h.VAPIDPublicKey)
+			secured.POST("/push/subscribe", h.PushSubscribe)
+			secured.DELETE("/push/subscribe", h.PushUnsubscribe)
 
 			// WebRTC calling
 			secured.POST("/calls", callH.StartCall)

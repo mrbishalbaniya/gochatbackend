@@ -2,9 +2,10 @@ package repositories
 
 import (
 	"context"
+	"time"
 
-	"github.com/pulse/chat-service/internal/models"
 	"github.com/google/uuid"
+	"github.com/pulse/chat-service/internal/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -204,8 +205,20 @@ type DeviceRepo struct{ DB *gorm.DB }
 func (r *DeviceRepo) Upsert(ctx context.Context, d *models.DeviceToken) error {
 	return r.DB.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "token"}},
-		DoUpdates: clause.AssignmentColumns([]string{"user_id", "platform", "active", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"user_id", "platform", "active", "p256dh", "auth", "updated_at"}),
 	}).Create(d).Error
+}
+
+func (r *DeviceRepo) Deactivate(ctx context.Context, userID uuid.UUID, endpoint string) error {
+	return r.DB.WithContext(ctx).Model(&models.DeviceToken{}).
+		Where("user_id = ? AND token = ?", userID, endpoint).
+		Updates(map[string]interface{}{"active": false, "updated_at": time.Now().UTC()}).Error
+}
+
+func (r *DeviceRepo) ListWeb(ctx context.Context, userID uuid.UUID) ([]models.DeviceToken, error) {
+	var items []models.DeviceToken
+	err := r.DB.WithContext(ctx).Where("user_id = ? AND active = true AND platform = ?", userID, "web").Find(&items).Error
+	return items, err
 }
 
 type VoiceRepo struct{ DB *gorm.DB }
