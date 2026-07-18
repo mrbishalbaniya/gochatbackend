@@ -1,0 +1,40 @@
+openapi: 3.0.3
+info:
+  title: Pulse Chat Service API
+  version: 1.0.0
+  description: Real-time messaging API for Pulse
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /auth/register:
+    post:
+      summary: Register
+      tags: [auth]
+  /auth/login:
+    post:
+      summary: Login
+      tags: [auth]
+  /conversations:
+    get:
+      summary: List conversations
+      tags: [conversations]
+      security: [{ bearerAuth: [] }]
+    post:
+      summary: Create conversation
+      tags: [conversations]
+      security: [{ bearerAuth: [] }]
+  /conversations/{id}/messages:
+    get:
+      summary: List messages
+      tags: [messages]
+      security: [{ bearerAuth: [] }]
+    post:
+      summary: Send message
+      tags: [messages]
+      security: [{ bearerAuth: [] }]
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
