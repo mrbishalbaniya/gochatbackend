@@ -9,6 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	callhandlers "github.com/pulse/chat-service/internal/call/handlers"
+	callservices "github.com/pulse/chat-service/internal/call/services"
+	callws "github.com/pulse/chat-service/internal/call/websocket"
 	"github.com/pulse/chat-service/internal/config"
 	"github.com/pulse/chat-service/internal/database"
 	"github.com/pulse/chat-service/internal/handlers"
@@ -17,15 +22,13 @@ import (
 	"github.com/pulse/chat-service/internal/storage"
 	"github.com/pulse/chat-service/internal/workers"
 	ws "github.com/pulse/chat-service/internal/websocket"
-	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 
 	_ "github.com/pulse/chat-service/docs"
 )
 
 // @title Pulse Chat Service API
 // @version 1.0
-// @description Real-time messaging API for Pulse
+// @description Real-time messaging + WebRTC calling API for Pulse
 // @BasePath /api/v1
 // @securityDefinitions.apikey BearerAuth
 // @in header
@@ -66,15 +69,21 @@ func main() {
 	svc := services.New(cfg, db, rdb, store, hub)
 	hub.Svc = svc
 
+	callHub := callws.NewHub(rdb, nil, cfg.JWTAccessSecret, cfg.CORSOrigins)
+	callSvc := callservices.New(cfg, db, rdb, callHub)
+	callHub.Svc = callSvc
+	callHandler := callhandlers.New(callSvc)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go hub.Run(ctx)
+	go callHub.Run(ctx)
 	go (&workers.NotificationWorker{DB: db}).Run(ctx)
 
 	r := gin.New()
 	r.Use(gin.Recovery(), gin.Logger())
 	h := handlers.New(svc)
-	routes.Register(r, cfg, h, hub)
+	routes.Register(r, cfg, h, hub, callHandler, callHub)
 
 	srv := &http.Server{Addr: ":" + cfg.HTTPPort, Handler: r, ReadHeaderTimeout: 10 * time.Second}
 	go func() {

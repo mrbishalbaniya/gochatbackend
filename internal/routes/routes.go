@@ -1,16 +1,25 @@
 package routes
 
 import (
+	"github.com/gin-gonic/gin"
+	callhandlers "github.com/pulse/chat-service/internal/call/handlers"
+	callws "github.com/pulse/chat-service/internal/call/websocket"
 	"github.com/pulse/chat-service/internal/config"
 	"github.com/pulse/chat-service/internal/handlers"
 	"github.com/pulse/chat-service/internal/middleware"
 	ws "github.com/pulse/chat-service/internal/websocket"
-	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func Register(r *gin.Engine, cfg *config.Config, h *handlers.Handler, hub *ws.Hub) {
+func Register(
+	r *gin.Engine,
+	cfg *config.Config,
+	h *handlers.Handler,
+	hub *ws.Hub,
+	callH *callhandlers.Handler,
+	callHub *callws.Hub,
+) {
 	r.Use(middleware.RequestID(), middleware.SecurityHeaders(), middleware.CORS(cfg.CORSOrigins), middleware.RateLimit(cfg.RateLimitRPM))
 
 	r.GET("/health", h.Health)
@@ -19,6 +28,7 @@ func Register(r *gin.Engine, cfg *config.Config, h *handlers.Handler, hub *ws.Hu
 	r.Static("/uploads", cfg.UploadDir)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.GET("/ws", hub.HandleWS)
+	r.GET("/ws/calls", callHub.HandleWS)
 
 	v1 := r.Group("/api/v1")
 	{
@@ -29,6 +39,8 @@ func Register(r *gin.Engine, cfg *config.Config, h *handlers.Handler, hub *ws.Hu
 			auth.POST("/refresh", h.Refresh)
 			auth.POST("/logout", h.Logout)
 		}
+
+		v1.GET("/ice-servers", callH.ICEServers)
 
 		secured := v1.Group("")
 		secured.Use(middleware.AuthJWT(cfg.JWTAccessSecret))
@@ -55,7 +67,6 @@ func Register(r *gin.Engine, cfg *config.Config, h *handlers.Handler, hub *ws.Hu
 			secured.POST("/conversations/:id/ws-ticket", h.WSTicket)
 			secured.POST("/conversations/:id/messages/:messageId/pin", h.PinMessage)
 			secured.GET("/conversations/:id/pins", h.ListPinned)
-			secured.POST("/conversations/:id/calls", h.StartCall)
 
 			secured.PATCH("/messages/:id", h.EditMessage)
 			secured.DELETE("/messages/:id", h.DeleteMessage)
@@ -75,8 +86,21 @@ func Register(r *gin.Engine, cfg *config.Config, h *handlers.Handler, hub *ws.Hu
 			secured.PATCH("/settings", h.UpdateSettings)
 			secured.POST("/devices", h.DeviceToken)
 			secured.GET("/notifications", h.Notifications)
-			secured.GET("/calls", h.ListCalls)
-			secured.POST("/calls/:id/end", h.EndCall)
+
+			// WebRTC calling
+			secured.POST("/calls", callH.StartCall)
+			secured.GET("/calls", callH.History)
+			secured.GET("/calls/missed", callH.Missed)
+			secured.GET("/calls/settings", callH.GetSettings)
+			secured.PATCH("/calls/settings", callH.UpdateSettings)
+			secured.GET("/calls/:id", callH.GetCall)
+			secured.POST("/calls/:id/accept", callH.Accept)
+			secured.POST("/calls/:id/reject", callH.Reject)
+			secured.POST("/calls/:id/end", callH.End)
+			secured.POST("/calls/:id/invite", callH.Invite)
+			secured.POST("/calls/:id/quality", callH.Quality)
+			secured.PATCH("/calls/:id/media", callH.MediaState)
+			secured.GET("/ice-servers/auth", callH.ICEServers)
 		}
 	}
 }

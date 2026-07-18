@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	callmodels "github.com/pulse/chat-service/internal/call/models"
 	"github.com/pulse/chat-service/internal/models"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
@@ -53,7 +54,7 @@ func ConnectRedis(redisURL string) (*redis.Client, error) {
 }
 
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&models.User{},
 		&models.RefreshToken{},
 		&models.Conversation{},
@@ -79,6 +80,31 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.DeviceToken{},
 		&models.ChatSettings{},
 		&models.StarredMessage{},
+	); err != nil {
+		return err
+	}
+	return migrateCallTables(db)
+}
+
+func migrateCallTables(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&callmodels.User{},
+		&callmodels.Call{},
+		&callmodels.Participant{},
+		&callmodels.ICECandidate{},
+		&callmodels.CallOffer{},
+		&callmodels.CallAnswer{},
+		&callmodels.CallLog{},
+		&callmodels.CallInvitation{},
+		&callmodels.CallRecording{},
+		&callmodels.MissedCall{},
+		&callmodels.BlockedUser{},
+		&callmodels.CallDevice{},
+		&callmodels.CallSettings{},
+		&callmodels.CallQuality{},
+		&callmodels.CallEvent{},
+		&callmodels.ScreenSharing{},
+		&callmodels.CallNotification{},
 	)
 }
 

@@ -1,0 +1,51 @@
+package constants
+
+const (
+	CallTypeAudio = "audio"
+	CallTypeVideo = "video"
+
+	CallStatusRinging    = "ringing"
+	CallStatusConnecting = "connecting"
+	CallStatusActive     = "active"
+	CallStatusEnded      = "ended"
+	CallStatusMissed     = "missed"
+	CallStatusRejected   = "rejected"
+	CallStatusFailed     = "failed"
+	CallStatusBusy       = "busy"
+
+	RoleHost       = "host"
+	RoleParticipant = "participant"
+
+	ParticipantJoined   = "joined"
+	ParticipantRinging  = "ringing"
+	ParticipantLeft     = "left"
+	ParticipantDeclined = "declined"
+	ParticipantMissed   = "missed"
+
+	WSPing            = "ping"
+	WSPong            = "pong"
+	WSOffer           = "offer"
+	WSAnswer          = "answer"
+	WSIceCandidate    = "ice-candidate"
+	WSJoinCall        = "join-call"
+	WSLeaveCall       = "leave-call"
+	WSMute            = "mute"
+	WSUnmute          = "unmute"
+	WSCameraOn        = "camera-on"
+	WSCameraOff       = "camera-off"
+	WSScreenShareOn   = "screen-share-on"
+	WSScreenShareOff  = "screen-share-off"
+	WSRaiseHand       = "raise-hand"
+	WSCallEnd         = "call-end"
+	WSCallInvite      = "call-invite"
+	WSParticipantUpdate = "participant-update"
+	WSNetworkStatus   = "network-status"
+	WSRecording       = "recording"
+	WSReject          = "reject"
+	WSAccept          = "accept"
+	WSHold            = "hold"
+	WSResume          = "resume"
+
+	RedisCallChannel = "pulse:call:events:"
+	RedisPresenceKey = "pulse:call:presence:"
+)

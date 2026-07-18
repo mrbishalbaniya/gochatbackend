@@ -23,6 +23,13 @@ type Config struct {
 	MaxUploadBytes   int64
 	PublicBaseURL    string
 	RateLimitRPM     int
+	// Calling (WebRTC)
+	STUNURLs        []string
+	TURNURLs        []string
+	TURNUsername    string
+	TURNCredential  string
+	MaxParticipants int
+	CallTimeoutSec  int
 }
 
 func Load() (*Config, error) {
@@ -39,6 +46,12 @@ func Load() (*Config, error) {
 		CORSOrigins:      splitCSV(getEnv("CORS_ORIGINS", "http://localhost:3000")),
 		MaxUploadBytes:   int64(getEnvInt("MAX_UPLOAD_MB", 50)) * 1024 * 1024,
 		RateLimitRPM:     getEnvInt("RATE_LIMIT_RPM", 120),
+		STUNURLs:         splitCSV(getEnv("STUN_URLS", "stun:stun.l.google.com:19302")),
+		TURNURLs:         splitCSV(getEnv("TURN_URLS", "")),
+		TURNUsername:     getEnv("TURN_USERNAME", ""),
+		TURNCredential:   getEnv("TURN_CREDENTIAL", ""),
+		MaxParticipants:  getEnvInt("MAX_PARTICIPANTS", 12),
+		CallTimeoutSec:   getEnvInt("CALL_TIMEOUT_SEC", 60),
 	}
 
 	accessMin := getEnvInt("ACCESS_TOKEN_TTL_MIN", 15)

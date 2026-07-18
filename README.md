@@ -1,42 +1,21 @@
 # Pulse Chat Service
 
-Real-time messaging backend for **Pulse** (Go + Gin + PostgreSQL + Redis).
+Real-time messaging **and** WebRTC voice/video calling in one Go service.
 
-## Requirements
+## Endpoints
 
-- Go 1.23+
-- PostgreSQL 16+
-- Redis 7+
-
-## Configuration
-
-Copy `.env.example` to `.env` and set secrets:
-
-```bash
-cp .env.example .env
-```
-
-In development, empty `JWT_*` secrets fall back to local-only defaults.  
-Production **requires** strong secrets and explicit `CORS_ORIGINS`.
+- Health: `GET /health`
+- Chat WS: `GET /ws?token=<jwt>`
+- Call WS: `GET /ws/calls?token=<jwt>`
+- API: `/api/v1`
+- ICE: `GET /api/v1/ice-servers`
+- Calls: `/api/v1/calls`
 
 ## Run
 
 ```bash
+cp .env.example .env
 go run ./cmd/server
 ```
 
-- Health: `GET /health`
-- Metrics: `GET /metrics`
-- API: `/api/v1`
-- Swagger UI: `/swagger/index.html`
-- WebSocket: `GET /ws?token=<accessToken>`
-
-## Test
-
-```bash
-go test ./...
-```
-
-## License
-
-Proprietary. All rights reserved.
+Production requires strong JWT secrets and `CORS_ORIGINS`.
