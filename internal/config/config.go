@@ -29,7 +29,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		AppEnv:           getEnv("APP_ENV", "development"),
 		AppName:          getEnv("APP_NAME", "Pulse Chat Service"),
-		HTTPPort:         getEnv("HTTP_PORT", "8080"),
+		HTTPPort:         getEnv("PORT", getEnv("HTTP_PORT", "8080")),
 		DatabaseURL:      mustEnv("DATABASE_URL", "postgres://chat:chat@localhost:5432/chat?sslmode=disable"),
 		RedisURL:         mustEnv("REDIS_URL", "redis://localhost:6379/0"),
 		JWTAccessSecret:  os.Getenv("JWT_ACCESS_SECRET"),
