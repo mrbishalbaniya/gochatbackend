@@ -57,6 +57,15 @@ func (r *UserRepo) Search(ctx context.Context, q string, limit int) ([]models.Us
 	return users, err
 }
 
+func (r *UserRepo) FindByIDs(ctx context.Context, ids []uuid.UUID) ([]models.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var users []models.User
+	err := r.DB.WithContext(ctx).Where("id IN ?", ids).Find(&users).Error
+	return users, err
+}
+
 func (r *UserRepo) FindByUsernames(ctx context.Context, names []string) ([]models.User, error) {
 	var users []models.User
 	lower := make([]string, len(names))
@@ -177,6 +186,17 @@ func (r *ConversationRepo) FindDirect(ctx context.Context, a, b uuid.UUID) (*mod
 func (r *ConversationRepo) ListMembers(ctx context.Context, conversationID uuid.UUID) ([]models.ConversationMember, error) {
 	var members []models.ConversationMember
 	err := r.DB.WithContext(ctx).Where("conversation_id = ? AND left_at IS NULL", conversationID).Find(&members).Error
+	return members, err
+}
+
+func (r *ConversationRepo) ListMembersForConversations(ctx context.Context, conversationIDs []uuid.UUID) ([]models.ConversationMember, error) {
+	if len(conversationIDs) == 0 {
+		return nil, nil
+	}
+	var members []models.ConversationMember
+	err := r.DB.WithContext(ctx).
+		Where("conversation_id IN ? AND left_at IS NULL", conversationIDs).
+		Find(&members).Error
 	return members, err
 }
 

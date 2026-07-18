@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/pulse/chat-service/internal/constants"
@@ -18,6 +19,7 @@ type ConversationView struct {
 	Membership   models.ConversationMember   `json:"membership"`
 	LastMessage  *models.Message             `json:"lastMessage,omitempty"`
 	Members      []models.ConversationMember `json:"members,omitempty"`
+	Peers        []dto.UserDTO               `json:"peers,omitempty"`
 }
 
 func (s *Services) CreateConversation(ctx context.Context, userID uuid.UUID, req dto.CreateConversationRequest) (*ConversationView, error) {
@@ -43,8 +45,7 @@ func (s *Services) CreateConversation(ctx context.Context, userID uuid.UUID, req
 			return nil, errors.New("cannot message blocked user")
 		}
 		if existing, err := s.Conversations.FindDirect(ctx, userID, other); err == nil {
-			m, _ := s.Conversations.GetMember(ctx, existing.ID, userID)
-			return &ConversationView{Conversation: *existing, Membership: *m}, nil
+			return s.GetConversation(ctx, userID, existing.ID)
 		}
 	}
 	if typ == constants.ConversationSelf {
@@ -82,8 +83,10 @@ func (s *Services) CreateConversation(ctx context.Context, userID uuid.UUID, req
 	if err := s.Conversations.Create(ctx, conv, members); err != nil {
 		return nil, err
 	}
-	membership, _ := s.Conversations.GetMember(ctx, conv.ID, userID)
-	view := &ConversationView{Conversation: *conv, Membership: *membership, Members: members}
+	view, err := s.GetConversation(ctx, userID, conv.ID)
+	if err != nil {
+		return nil, err
+	}
 	s.publish(ctx, constants.WSEventConversation, &conv.ID, &userID, view)
 	return view, nil
 }
@@ -93,9 +96,37 @@ func (s *Services) ListConversations(ctx context.Context, userID uuid.UUID, arch
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]uuid.UUID, 0, len(convs))
+	for _, c := range convs {
+		ids = append(ids, c.ID)
+	}
+	allMembers, _ := s.Conversations.ListMembersForConversations(ctx, ids)
+	membersByConv := map[uuid.UUID][]models.ConversationMember{}
+	userIDs := make([]uuid.UUID, 0, len(allMembers))
+	seenUsers := map[uuid.UUID]struct{}{}
+	for _, m := range allMembers {
+		membersByConv[m.ConversationID] = append(membersByConv[m.ConversationID], m)
+		if _, ok := seenUsers[m.UserID]; !ok {
+			seenUsers[m.UserID] = struct{}{}
+			userIDs = append(userIDs, m.UserID)
+		}
+	}
+	users, _ := s.Users.FindByIDs(ctx, userIDs)
+	userMap := map[uuid.UUID]models.User{}
+	for i := range users {
+		userMap[users[i].ID] = users[i]
+	}
+
 	out := make([]ConversationView, 0, len(convs))
 	for _, c := range convs {
-		view := ConversationView{Conversation: c, Membership: memberMap[c.ID]}
+		members := membersByConv[c.ID]
+		view := ConversationView{
+			Conversation: c,
+			Membership:   memberMap[c.ID],
+			Members:      members,
+			Peers:        peersFromMembers(members, userID, userMap),
+		}
+		applyDisplayTitle(&view, userID)
 		if lm, err := s.Messages.Latest(ctx, c.ID); err == nil {
 			view.LastMessage = lm
 		}
@@ -118,11 +149,85 @@ func (s *Services) GetConversation(ctx context.Context, userID, conversationID u
 		return nil, err
 	}
 	members, _ := s.Conversations.ListMembers(ctx, conversationID)
-	view := &ConversationView{Conversation: *c, Membership: *m, Members: members}
-	if lm, err := s.Messages.Latest(ctx, c.ID); err == nil {
+	userIDs := make([]uuid.UUID, 0, len(members))
+	for _, mem := range members {
+		userIDs = append(userIDs, mem.UserID)
+	}
+	users, _ := s.Users.FindByIDs(ctx, userIDs)
+	userMap := map[uuid.UUID]models.User{}
+	for i := range users {
+		userMap[users[i].ID] = users[i]
+	}
+	view := &ConversationView{
+		Conversation: *c,
+		Membership:   *m,
+		Members:      members,
+		Peers:        peersFromMembers(members, userID, userMap),
+	}
+	applyDisplayTitle(view, userID)
+	if lm, err := s.Messages.Latest(ctx, conversationID); err == nil {
 		view.LastMessage = lm
 	}
 	return view, nil
+}
+
+func peersFromMembers(members []models.ConversationMember, me uuid.UUID, users map[uuid.UUID]models.User) []dto.UserDTO {
+	out := make([]dto.UserDTO, 0, len(members))
+	for _, m := range members {
+		if m.UserID == me {
+			continue
+		}
+		if u, ok := users[m.UserID]; ok {
+			out = append(out, toUserDTO(&u))
+		}
+	}
+	return out
+}
+
+// applyDisplayTitle fills empty / default titles using peer display names for the API response.
+func applyDisplayTitle(view *ConversationView, me uuid.UUID) {
+	title := strings.TrimSpace(view.Conversation.Title)
+	switch view.Conversation.Type {
+	case constants.ConversationDirect:
+		if len(view.Peers) > 0 {
+			peer := view.Peers[0]
+			name := strings.TrimSpace(peer.DisplayName)
+			if name == "" {
+				name = peer.Username
+			}
+			if name != "" {
+				view.Conversation.Title = name
+			}
+			if view.Conversation.AvatarURL == "" && peer.AvatarURL != "" {
+				view.Conversation.AvatarURL = peer.AvatarURL
+			}
+		} else if title == "" {
+			view.Conversation.Title = "Direct chat"
+		}
+	case constants.ConversationGroup, constants.ConversationBroadcast:
+		if title == "" || strings.EqualFold(title, "New group") {
+			names := make([]string, 0, len(view.Peers))
+			for _, p := range view.Peers {
+				n := strings.TrimSpace(p.DisplayName)
+				if n == "" {
+					n = p.Username
+				}
+				if n != "" {
+					names = append(names, n)
+				}
+			}
+			if len(names) > 0 {
+				view.Conversation.Title = strings.Join(names, ", ")
+			} else if title == "" {
+				view.Conversation.Title = "Group"
+			}
+		}
+	default:
+		_ = me
+		if title == "" {
+			view.Conversation.Title = "Chat"
+		}
+	}
 }
 
 func (s *Services) SetArchived(ctx context.Context, userID, conversationID uuid.UUID, archived bool) error {
