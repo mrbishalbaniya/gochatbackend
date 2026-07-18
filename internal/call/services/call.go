@@ -74,8 +74,31 @@ func (s *Services) IsBlocked(ctx context.Context, a, b uuid.UUID) (bool, error) 
 }
 
 type CallView struct {
-	Call         models.Call          `json:"call"`
-	Participants []models.Participant `json:"participants"`
+	Call           models.Call          `json:"call"`
+	Participants   []models.Participant `json:"participants"`
+	JoinedExisting bool                 `json:"joinedExisting,omitempty"`
+}
+
+// findOpenDirectCall returns the earliest open 1:1 call that includes both users.
+func (s *Services) findOpenDirectCall(ctx context.Context, a, b uuid.UUID) (*models.Call, error) {
+	var call models.Call
+	err := s.DB.WithContext(ctx).Raw(`
+		SELECT c.* FROM pulse_calls c
+		INNER JOIN pulse_call_participants pa ON pa.call_id = c.id AND pa.user_id = ? AND pa.deleted_at IS NULL
+		INNER JOIN pulse_call_participants pb ON pb.call_id = c.id AND pb.user_id = ? AND pb.deleted_at IS NULL
+		WHERE c.status IN (?, ?, ?)
+		  AND c.deleted_at IS NULL
+		  AND c.is_group = false
+		ORDER BY c.created_at ASC
+		LIMIT 1
+	`, a, b, constants.CallStatusRinging, constants.CallStatusConnecting, constants.CallStatusActive).Scan(&call).Error
+	if err != nil {
+		return nil, err
+	}
+	if call.ID == uuid.Nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &call, nil
 }
 
 func (s *Services) StartCall(ctx context.Context, initiator uuid.UUID, req dto.StartCallRequest) (*CallView, error) {
@@ -86,6 +109,7 @@ func (s *Services) StartCall(ctx context.Context, initiator uuid.UUID, req dto.S
 	if len(ids) == 0 {
 		return nil, errors.New("participants required")
 	}
+	others := make([]uuid.UUID, 0, len(ids))
 	for _, id := range ids {
 		if id == initiator {
 			continue
@@ -97,8 +121,37 @@ func (s *Services) StartCall(ctx context.Context, initiator uuid.UUID, req dto.S
 		if blocked {
 			return nil, errors.New("cannot call blocked user")
 		}
+		others = append(others, id)
+	}
+	if len(others) == 0 {
+		return nil, errors.New("participants required")
 	}
 	_ = s.EnsureUser(ctx, initiator, "")
+
+	// Mutual call: if the other user already called us (or we already have an open call), join it.
+	if !req.IsGroup && len(others) == 1 {
+		other := others[0]
+		if existing, err := s.findOpenDirectCall(ctx, initiator, other); err == nil && existing != nil {
+			p, perr := s.getParticipant(ctx, existing.ID, initiator)
+			if perr == nil {
+				switch p.Status {
+				case constants.ParticipantRinging:
+					view, aerr := s.AcceptCall(ctx, initiator, existing.ID)
+					if aerr != nil {
+						return nil, aerr
+					}
+					view.JoinedExisting = true
+					return view, nil
+				case constants.ParticipantJoined:
+					view, gerr := s.GetCall(ctx, initiator, existing.ID)
+					if gerr != nil {
+						return nil, gerr
+					}
+					return view, nil
+				}
+			}
+		}
+	}
 
 	call := &models.Call{
 		ConversationID:  req.ConversationID,
@@ -106,17 +159,14 @@ func (s *Services) StartCall(ctx context.Context, initiator uuid.UUID, req dto.S
 		CallType:        req.CallType,
 		Status:          constants.CallStatusRinging,
 		MaxParticipants: s.Cfg.MaxParticipants,
-		IsGroup:         req.IsGroup || len(ids) > 1,
+		IsGroup:         req.IsGroup || len(others) > 1,
 	}
 	now := time.Now().UTC()
 	parts := []models.Participant{{
 		UserID: initiator, Role: constants.RoleHost, Status: constants.ParticipantJoined,
 		JoinedAt: &now, CameraOn: req.CallType == constants.CallTypeVideo,
 	}}
-	for _, id := range ids {
-		if id == initiator {
-			continue
-		}
+	for _, id := range others {
 		parts = append(parts, models.Participant{
 			UserID: id, Role: constants.RoleParticipant, Status: constants.ParticipantRinging,
 		})
@@ -154,7 +204,41 @@ func (s *Services) StartCall(ctx context.Context, initiator uuid.UUID, req dto.S
 		return nil
 	})
 	if err != nil {
+		// Lost the race: peer created a call first — join theirs.
+		if !req.IsGroup && len(others) == 1 {
+			if existing, ferr := s.findOpenDirectCall(ctx, initiator, others[0]); ferr == nil && existing != nil && existing.ID != call.ID {
+				p, perr := s.getParticipant(ctx, existing.ID, initiator)
+				if perr == nil && p.Status == constants.ParticipantRinging {
+					view, aerr := s.AcceptCall(ctx, initiator, existing.ID)
+					if aerr == nil {
+						view.JoinedExisting = true
+						return view, nil
+					}
+				}
+				if view, gerr := s.GetCall(ctx, initiator, existing.ID); gerr == nil {
+					return view, nil
+				}
+			}
+		}
 		return nil, err
+	}
+
+	// Double-check after create: if another open call exists (simultaneous dial), prefer the older one.
+	if !req.IsGroup && len(others) == 1 {
+		if existing, ferr := s.findOpenDirectCall(ctx, initiator, others[0]); ferr == nil && existing != nil && existing.ID != call.ID {
+			// End the call we just created; join the older one.
+			_, _ = s.EndCall(ctx, initiator, call.ID)
+			p, perr := s.getParticipant(ctx, existing.ID, initiator)
+			if perr == nil && p.Status == constants.ParticipantRinging {
+				view, aerr := s.AcceptCall(ctx, initiator, existing.ID)
+				if aerr != nil {
+					return nil, aerr
+				}
+				view.JoinedExisting = true
+				return view, nil
+			}
+			return s.GetCall(ctx, initiator, existing.ID)
+		}
 	}
 
 	view := &CallView{Call: *call, Participants: parts}
